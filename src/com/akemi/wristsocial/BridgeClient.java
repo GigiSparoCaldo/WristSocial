@@ -8,6 +8,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import org.json.JSONArray;
@@ -18,6 +19,11 @@ public class BridgeClient {
 
     private final LruCache<String, String> cache = new LruCache<>(25);
     private final LruCache<String, String> trCache = new LruCache<>(200);
+
+    public static class DownloadedFile {
+        public String name;
+        public byte[] data;
+    }
 
     public String get(String pathAndQuery, boolean force) throws Exception {
         String key = host + pathAndQuery;
@@ -38,6 +44,42 @@ public class BridgeClient {
         if (code >= 400) throw new Exception("Errore Bridge HTTP " + code);
         cache.put(key, res);
         return res;
+    }
+
+    public String postData(String path, byte[] payload, String filename) throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL(host + path).openConnection();
+        c.setRequestMethod("POST");
+        c.setDoOutput(true);
+        c.setConnectTimeout(6000);
+        c.setReadTimeout(12000);
+        c.setRequestProperty("X-Pin", pin);
+        if (filename != null) c.setRequestProperty("X-Filename", URLEncoder.encode(filename, "UTF-8"));
+        try (OutputStream os = c.getOutputStream()) { os.write(payload); }
+        InputStream is = c.getResponseCode() >= 400 ? c.getErrorStream() : c.getInputStream();
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buf = new byte[4096];
+        int n;
+        while ((n = is.read(buf)) != -1) out.write(buf, 0, n);
+        c.disconnect();
+        return new String(out.toByteArray(), StandardCharsets.UTF_8);
+    }
+
+    public DownloadedFile downloadFile() throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL(host + "/file").openConnection();
+        c.setConnectTimeout(7000);
+        c.setReadTimeout(12000);
+        c.setRequestProperty("X-Pin", pin);
+        if (c.getResponseCode() >= 400) { c.disconnect(); throw new Exception("Nessun file inviato dallo Z Flip"); }
+        String hdrName = c.getHeaderField("X-Filename");
+        DownloadedFile df = new DownloadedFile();
+        df.name = (hdrName != null && !hdrName.isEmpty()) ? URLDecoder.decode(hdrName, "UTF-8") : "file_zflip.bin";
+        try (InputStream is = c.getInputStream(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = is.read(buf)) != -1) out.write(buf, 0, n);
+            df.data = out.toByteArray();
+        } finally { c.disconnect(); }
+        return df;
     }
 
     public Bitmap getProxiedImage(String rawUrl) throws Exception {

@@ -1,6 +1,7 @@
 package com.akemi.wristsocial;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.Color;
@@ -25,6 +26,7 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     private WatchUi ui;
     private BridgeClient api;
+    private DropNotifView dropNotif;
     private final ExecutorService pool = Executors.newFixedThreadPool(3);
     private final List<Runnable> backStack = new ArrayList<>();
     private boolean imagesOnTap = true;
@@ -40,7 +42,16 @@ public class MainActivity extends Activity {
         api.pin = p.getString("pin", "1234");
         imagesOnTap = p.getBoolean("img_tap", true);
         autoIt = p.getBoolean("auto_it", true);
+        dropNotif = new DropNotifView(this, ui, api, pool);
         showInsta(false);
+    }
+
+    @Override
+    protected void onActivityResult(int reqCode, int resCode, Intent data) {
+        super.onActivityResult(reqCode, resCode, data);
+        if (reqCode == DropNotifView.REQ_WATCH_FILE && resCode == RESULT_OK && data != null && data.getData() != null) {
+            dropNotif.handleWatchFilePicked(data.getData());
+        }
     }
 
     @Override
@@ -74,35 +85,38 @@ public class MainActivity extends Activity {
         reload.run();
     }
 
-    private void topBar(String tab, Runnable reloadCache, Runnable reloadForce) {
+    private void topBar(String tab, final Runnable reloadCache, final Runnable reloadForce) {
         LinearLayout r1 = new LinearLayout(this);
         r1.setOrientation(LinearLayout.HORIZONTAL);
         r1.setGravity(Gravity.CENTER);
 
-        Button bAa = ui.chip("Aa", "#181E29", "#263042", "#2D3748", "#38BDF8");
-        bAa.setOnClickListener(v -> cycleFont(reloadCache));
+        Button bNotif = ui.chip("🔔", "#181E29", "#263042", "#2D3748", "#FBBF24");
+        bNotif.setOnClickListener(v -> nav(reloadCache, () -> dropNotif.showNotifs(this::onBackPressed)));
 
-        Button bDm = ui.chip("💬 DM", "#181E29", "#263042", "#2D3748", "#F472B6");
-        LinearLayout.LayoutParams mlp = new LinearLayout.LayoutParams(
+        Button bDrop = ui.chip("📋", "#181E29", "#263042", "#2D3748", "#34D399");
+        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        mlp.leftMargin = ui.dp(5);
-        mlp.rightMargin = ui.dp(5);
-        bDm.setLayoutParams(mlp);
-        bDm.setOnClickListener(v -> nav(reloadCache, () -> showDm(false)));
+        dlp.leftMargin = ui.dp(4);
+        bDrop.setLayoutParams(dlp);
+        bDrop.setOnClickListener(v -> nav(reloadCache, () -> dropNotif.showDrop(this::onBackPressed)));
 
-        Button bRef = ui.chip("↻", "#181E29", "#263042", "#2D3748", "#34D399");
-        bRef.setOnClickListener(v -> reloadForce.run());
+        Button bAa = ui.chip("Aa", "#181E29", "#263042", "#2D3748", "#38BDF8");
+        LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        alp.leftMargin = ui.dp(4);
+        bAa.setLayoutParams(alp);
+        bAa.setOnClickListener(v -> cycleFont(reloadCache));
 
         Button bSet = ui.chip("⚙", "#181E29", "#263042", "#2D3748", "#94A3B8");
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        slp.leftMargin = ui.dp(5);
+        slp.leftMargin = ui.dp(4);
         bSet.setLayoutParams(slp);
         bSet.setOnClickListener(v -> nav(reloadCache, this::showSettings));
 
+        r1.addView(bNotif);
+        r1.addView(bDrop);
         r1.addView(bAa);
-        r1.addView(bDm);
-        r1.addView(bRef);
         r1.addView(bSet);
         ui.box.addView(r1);
 
@@ -115,21 +129,33 @@ public class MainActivity extends Activity {
         r2.setLayoutParams(r2lp);
 
         boolean isIg = "ig".equals(tab);
-        Button bIg = ui.chip("Instagram", isIg ? "#DB2777" : "#141923", "#BE185D", isIg ? null : "#2A3447", "#FFFFFF");
+        Button bIg = ui.chip("Insta", isIg ? "#DB2777" : "#141923", "#BE185D", isIg ? null : "#2A3447", "#FFFFFF");
         Button bRd = ui.chip("Reddit", !isIg ? "#EA580C" : "#141923", "#C2410C", !isIg ? null : "#2A3447", "#FFFFFF");
+        Button bDm = ui.chip("DM", "#181E29", "#263042", "#2D3748", "#F472B6");
+        Button bRef = ui.chip("↻", "#181E29", "#263042", "#2D3748", "#34D399");
+
         LinearLayout.LayoutParams p1 = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         LinearLayout.LayoutParams p2 = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        p2.leftMargin = ui.dp(5);
+        p2.leftMargin = ui.dp(4);
+        LinearLayout.LayoutParams p3 = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        p3.leftMargin = ui.dp(4);
+
         bIg.setLayoutParams(p1);
         bRd.setLayoutParams(p2);
+        bDm.setLayoutParams(p3);
+        bRef.setLayoutParams(p3);
+
         bIg.setOnClickListener(v -> showInsta(false));
         bRd.setOnClickListener(v -> showReddit("", "hot", false));
+        bDm.setOnClickListener(v -> nav(reloadCache, () -> showDm(false)));
+        bRef.setOnClickListener(v -> reloadForce.run());
+
         r2.addView(bIg);
         r2.addView(bRd);
+        r2.addView(bDm);
+        r2.addView(bRef);
         ui.box.addView(r2);
     }
-
-    // ==================== INSTAGRAM ====================
 
     private void showInsta(final boolean force) {
         ui.clear();
@@ -172,10 +198,7 @@ public class MainActivity extends Activity {
     }
 
     private void addStoryBubble(LinearLayout row, JSONObject st) {
-        final String id = st.optString("id", "");
-        final String user = st.optString("user", "");
-        final String av = st.optString("avatar", "");
-
+        final String id = st.optString("id", ""), user = st.optString("user", ""), av = st.optString("avatar", "");
         LinearLayout item = new LinearLayout(this);
         item.setOrientation(LinearLayout.VERTICAL);
         item.setGravity(Gravity.CENTER);
@@ -242,11 +265,8 @@ public class MainActivity extends Activity {
 
     private void renderIgCard(JSONObject m) {
         LinearLayout card = ui.card();
-        final String id = m.optString("id", "");
-        String user = m.optString("user", "");
-        final String caption = m.optString("text", "");
-        int likes = m.optInt("likes", 0);
-        int comm = m.optInt("comments", 0);
+        final String id = m.optString("id", ""), user = m.optString("user", ""), caption = m.optString("text", "");
+        int likes = m.optInt("likes", 0), comm = m.optInt("comments", 0);
         String img = m.optString("img", "");
         final String vid = m.optString("vid", "");
 
@@ -275,8 +295,6 @@ public class MainActivity extends Activity {
         card.addView(likeBtn);
         ui.box.addView(card);
     }
-
-    // ==================== INSTAGRAM DIRECT (DM) ====================
 
     private void showDm(final boolean force) {
         ui.clear();
@@ -343,8 +361,6 @@ public class MainActivity extends Activity {
         ui.box.addView(send);
     }
 
-    // ==================== REDDIT (LOGGATO SUL PONTE) ====================
-
     private void showReddit(final String sub, final String sort, final boolean force) {
         ui.clear();
         topBar("rd", () -> showReddit(sub, sort, false), () -> showReddit(sub, sort, true));
@@ -383,9 +399,7 @@ public class MainActivity extends Activity {
 
     private void renderRedditCard(final String sub, final String sort, JSONObject d) {
         LinearLayout card = ui.card();
-        final String title = d.optString("title", "");
-        final String perm = d.optString("permalink", "");
-        String url = d.optString("url", "");
+        final String title = d.optString("title", ""), perm = d.optString("permalink", ""), url = d.optString("url", "");
         ui.text(card, "r/" + d.optString("subreddit", "") + " • ▲ " + d.optInt("score", 0), 10.5f, "#FB923C", true);
         final TextView tvT = ui.text(card, title, 13.5f, "#F8FAFC", true);
         if (autoIt) {
@@ -437,8 +451,6 @@ public class MainActivity extends Activity {
             }
         });
     }
-
-    // ==================== IMPOSTAZIONI & MEDIA ====================
 
     private void showSettings() {
         ui.clear();
