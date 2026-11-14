@@ -15,6 +15,7 @@ import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.List;
@@ -38,7 +39,7 @@ public class MainActivity extends Activity {
         SharedPreferences p = getSharedPreferences("ws_prefs", MODE_PRIVATE);
         ui = new WatchUi(this, p.getFloat("scale", 1.0f));
         api = new BridgeClient();
-        api.host = p.getString("host", "http://127.0.0.1:8765");
+        api.host = p.getString("host", "http://192.168.1.2:8765");
         api.pin = p.getString("pin", "1234");
         imagesOnTap = p.getBoolean("img_tap", true);
         autoIt = p.getBoolean("auto_it", true);
@@ -100,6 +101,13 @@ public class MainActivity extends Activity {
         bDrop.setLayoutParams(dlp);
         bDrop.setOnClickListener(v -> nav(reloadCache, () -> dropNotif.showDrop(this::onBackPressed)));
 
+        Button bDm = ui.chip("DM", "#181E29", "#263042", "#2D3748", "#F472B6");
+        LinearLayout.LayoutParams mlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        mlp.leftMargin = ui.dp(4);
+        bDm.setLayoutParams(mlp);
+        bDm.setOnClickListener(v -> nav(reloadCache, () -> showDm(false)));
+
         Button bAa = ui.chip("Aa", "#181E29", "#263042", "#2D3748", "#38BDF8");
         LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -114,10 +122,7 @@ public class MainActivity extends Activity {
         bSet.setLayoutParams(slp);
         bSet.setOnClickListener(v -> nav(reloadCache, this::showSettings));
 
-        r1.addView(bNotif);
-        r1.addView(bDrop);
-        r1.addView(bAa);
-        r1.addView(bSet);
+        r1.addView(bNotif); r1.addView(bDrop); r1.addView(bDm); r1.addView(bAa); r1.addView(bSet);
         ui.box.addView(r1);
 
         LinearLayout r2 = new LinearLayout(this);
@@ -125,37 +130,96 @@ public class MainActivity extends Activity {
         r2.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams r2lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        r2lp.setMargins(0, ui.dp(6), 0, ui.dp(6));
+        r2lp.setMargins(0, ui.dp(5), 0, ui.dp(5));
         r2.setLayoutParams(r2lp);
 
-        boolean isIg = "ig".equals(tab);
+        boolean isIg = "ig".equals(tab), isRd = "rd".equals(tab), isNw = "nw".equals(tab);
         Button bIg = ui.chip("Insta", isIg ? "#DB2777" : "#141923", "#BE185D", isIg ? null : "#2A3447", "#FFFFFF");
-        Button bRd = ui.chip("Reddit", !isIg ? "#EA580C" : "#141923", "#C2410C", !isIg ? null : "#2A3447", "#FFFFFF");
-        Button bDm = ui.chip("DM", "#181E29", "#263042", "#2D3748", "#F472B6");
+        Button bRd = ui.chip("Reddit", isRd ? "#EA580C" : "#141923", "#C2410C", isRd ? null : "#2A3447", "#FFFFFF");
+        Button bNw = ui.chip("News", isNw ? "#0284C7" : "#141923", "#0369A1", isNw ? null : "#2A3447", "#FFFFFF");
         Button bRef = ui.chip("↻", "#181E29", "#263042", "#2D3748", "#34D399");
 
         LinearLayout.LayoutParams p1 = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         LinearLayout.LayoutParams p2 = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        p2.leftMargin = ui.dp(4);
+        p2.leftMargin = ui.dp(3);
         LinearLayout.LayoutParams p3 = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        p3.leftMargin = ui.dp(4);
+        p3.leftMargin = ui.dp(3);
 
-        bIg.setLayoutParams(p1);
-        bRd.setLayoutParams(p2);
-        bDm.setLayoutParams(p3);
-        bRef.setLayoutParams(p3);
+        bIg.setLayoutParams(p1); bRd.setLayoutParams(p2); bNw.setLayoutParams(p2); bRef.setLayoutParams(p3);
 
         bIg.setOnClickListener(v -> showInsta(false));
         bRd.setOnClickListener(v -> showReddit("", "hot", false));
-        bDm.setOnClickListener(v -> nav(reloadCache, () -> showDm(false)));
+        bNw.setOnClickListener(v -> showNews(false));
         bRef.setOnClickListener(v -> reloadForce.run());
 
-        r2.addView(bIg);
-        r2.addView(bRd);
-        r2.addView(bDm);
-        r2.addView(bRef);
+        r2.addView(bIg); r2.addView(bRd); r2.addView(bNw); r2.addView(bRef);
         ui.box.addView(r2);
     }
+
+    // ==================== GOOGLE NEWS / DISCOVER ====================
+
+    private void showNews(final boolean force) {
+        ui.clear();
+        topBar("nw", () -> showNews(false), () -> showNews(true));
+        final TextView ld = ui.text(ui.box, "Caricamento Google News...", 12.5f, "#94A3B8", false);
+
+        pool.execute(() -> {
+            try {
+                JSONArray items = new JSONObject(api.get("/news/feed", force)).optJSONArray("items");
+                runOnUiThread(() -> {
+                    ui.box.removeView(ld);
+                    if (items == null || items.length() == 0) {
+                        ui.text(ui.box, "Nessuna notizia. Apri la scheda News in SocialBridge sullo Z Flip e accedi a Google.", 12f, "#E2E8F0", false);
+                        return;
+                    }
+                    for (int i = 0; i < items.length(); i++) {
+                        JSONObject it = items.optJSONObject(i);
+                        if (it == null) continue;
+                        final String title = it.optString("title", "");
+                        final String url = it.optString("url", "");
+                        String src = it.optString("src", "Google News");
+                        String img = it.optString("img", "");
+
+                        LinearLayout card = ui.card();
+                        ui.text(card, src, 10.5f, "#38BDF8", true);
+                        ui.text(card, title, 13.5f, "#F8FAFC", true);
+                        if (!img.isEmpty()) attachImage(card, img, imagesOnTap);
+                        if (!url.isEmpty()) {
+                            Button bRead = ui.pill("Leggi Articolo", "#0284C7", "#0369A1", null, "#FFFFFF");
+                            bRead.setOnClickListener(v -> nav(() -> showNews(false), () -> openNewsArticle(url, title)));
+                            card.addView(bRead);
+                        }
+                        ui.box.addView(card);
+                    }
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> ld.setText("Errore Ponte: " + e.getMessage() + "\nTocca ⚙ per trovare lo Z Flip."));
+            }
+        });
+    }
+
+    private void openNewsArticle(final String url, final String title) {
+        ui.clear();
+        Button back = ui.chip("← Indietro", "#181E29", "#263042", "#2D3748", "#FFFFFF");
+        back.setOnClickListener(v -> onBackPressed());
+        ui.box.addView(back);
+        ui.text(ui.box, title, 15f, "#38BDF8", true);
+        final TextView ld = ui.text(ui.box, "Estrazione articolo...", 12.5f, "#94A3B8", false);
+
+        pool.execute(() -> {
+            try {
+                String txt = new JSONObject(api.get("/news/article?url=" + URLEncoder.encode(url, "UTF-8"), false)).optString("text", "");
+                runOnUiThread(() -> {
+                    ui.box.removeView(ld);
+                    ui.text(ui.box, txt, 13f, "#E2E8F0", false);
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> ld.setText("Errore articolo: " + e.getMessage()));
+            }
+        });
+    }
+
+    // ==================== INSTAGRAM ====================
 
     private void showInsta(final boolean force) {
         ui.clear();
@@ -168,7 +232,7 @@ public class MainActivity extends Activity {
         hsv.addView(storyRow);
         ui.box.addView(hsv);
 
-        final TextView loading = ui.text(ui.box, "Connessione a SocialBridge...", 13f, "#94A3B8", false);
+        final TextView loading = ui.text(ui.box, "Connessione a SocialBridge...", 12.5f, "#94A3B8", false);
 
         pool.execute(() -> {
             try {
@@ -183,7 +247,7 @@ public class MainActivity extends Activity {
                         }
                     }
                     if (items == null || items.length() == 0) {
-                        ui.text(ui.box, "Nessun post. Verifica il login IG su SocialBridge (Z Flip).", 12.5f, "#E2E8F0", false);
+                        ui.text(ui.box, "Nessun post. Verifica il login IG su SocialBridge (Z Flip).", 12f, "#E2E8F0", false);
                         return;
                     }
                     for (int i = 0; i < items.length(); i++) {
@@ -192,7 +256,7 @@ public class MainActivity extends Activity {
                     }
                 });
             } catch (Exception e) {
-                runOnUiThread(() -> loading.setText("Errore Ponte: " + e.getMessage() + "\nApri SocialBridge sullo Z Flip."));
+                runOnUiThread(() -> loading.setText("Errore Ponte: " + e.getMessage() + "\nTocca ⚙ in alto a destra e premi 'Trova Z Flip'."));
             }
         });
     }
@@ -205,7 +269,7 @@ public class MainActivity extends Activity {
         item.setPadding(ui.dp(5), ui.dp(4), ui.dp(5), ui.dp(4));
 
         final ImageView iv = new ImageView(this);
-        int sz = ui.dp(44);
+        int sz = ui.dp(42);
         iv.setLayoutParams(new LinearLayout.LayoutParams(sz, sz));
         iv.setBackground(ui.roundBox("#1F2937", "#EC4899", 999));
         item.addView(iv);
@@ -475,6 +539,25 @@ public class MainActivity extends Activity {
         hostEt.setPadding(ui.dp(12), ui.dp(10), ui.dp(12), ui.dp(10));
         ui.box.addView(hostEt);
 
+        final Button scanBtn = ui.pill("🔍 Trova Z Flip Automaticamente", "#0284C7", "#0369A1", null, "#FFFFFF");
+        scanBtn.setOnClickListener(v -> {
+            scanBtn.setText("Ricerca Z Flip in corso...");
+            scanBtn.setEnabled(false);
+            pool.execute(() -> {
+                final String found = api.discoverHost();
+                runOnUiThread(() -> {
+                    scanBtn.setEnabled(true);
+                    if (found != null) {
+                        hostEt.setText(found);
+                        scanBtn.setText("✓ Trovato: " + found);
+                    } else {
+                        scanBtn.setText("Non trovato (copia IP da SocialBridge)");
+                    }
+                });
+            });
+        });
+        ui.box.addView(scanBtn);
+
         final Button imgBtn = ui.pill(imagesOnTap ? "🖼 Foto: Solo al tocco" : "🖼 Foto: Automatiche", "#141923", "#222B3A", "#059669", "#34D399");
         imgBtn.setOnClickListener(v -> {
             imagesOnTap = !imagesOnTap;
@@ -495,6 +578,7 @@ public class MainActivity extends Activity {
             getSharedPreferences("ws_prefs", MODE_PRIVATE).edit()
                     .putString("pin", api.pin).putString("host", api.host)
                     .putBoolean("img_tap", imagesOnTap).putBoolean("auto_it", autoIt).apply();
+            Toast.makeText(this, "Salvato!", Toast.LENGTH_SHORT).show();
             onBackPressed();
         });
     }

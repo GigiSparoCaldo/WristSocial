@@ -7,14 +7,28 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.NetworkInterface;
+import java.net.Socket;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.json.JSONArray;
 
 public class BridgeClient {
-    public String host = "http://127.0.0.1:8765";
+    public String host = "http://192.168.1.2:8765";
     public String pin = "1234";
 
     private final LruCache<String, String> cache = new LruCache<>(25);
@@ -23,6 +37,42 @@ public class BridgeClient {
     public static class DownloadedFile {
         public String name;
         public byte[] data;
+    }
+
+    public String discoverHost() {
+        Set<String> candidates = new LinkedHashSet<>();
+        candidates.add("10.0.0.1");
+        candidates.add("192.168.43.1");
+        candidates.add("172.20.10.1");
+        try {
+            for (NetworkInterface ni : Collections.list(NetworkInterface.getNetworkInterfaces())) {
+                for (InetAddress addr : Collections.list(ni.getInetAddresses())) {
+                    if (!addr.isLoopbackAddress() && addr instanceof Inet4Address) {
+                        String ip = addr.getHostAddress();
+                        if (ip != null && ip.contains(".")) {
+                            String prefix = ip.substring(0, ip.lastIndexOf('.') + 1);
+                            for (int i = 1; i <= 254; i++) candidates.add(prefix + i);
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+
+        final AtomicReference<String> found = new AtomicReference<>(null);
+        ExecutorService scanPool = Executors.newFixedThreadPool(24);
+        for (final String ip : candidates) {
+            scanPool.execute(() -> {
+                if (found.get() != null) return;
+                try (Socket s = new Socket()) {
+                    s.connect(new InetSocketAddress(ip, 8765), 250);
+                    found.compareAndSet(null, "http://" + ip + ":8765");
+                } catch (Exception ignored) {}
+            });
+        }
+        scanPool.shutdown();
+        try { scanPool.awaitTermination(3, TimeUnit.SECONDS); } catch (Exception ignored) {}
+        scanPool.shutdownNow();
+        return found.get();
     }
 
     public String get(String pathAndQuery, boolean force) throws Exception {
@@ -40,8 +90,8 @@ public class BridgeClient {
         while ((n = is.read(buf)) != -1) out.write(buf, 0, n);
         c.disconnect();
         String res = new String(out.toByteArray(), StandardCharsets.UTF_8);
-        if (code == 401) throw new Exception("PIN Bridge errato (tocca ⚙)");
-        if (code >= 400) throw new Exception("Errore Bridge HTTP " + code);
+        if (code == 401) throw new Exception("PIN errato (tocca ⚙)");
+        if (code >= 400) throw new Exception("Errore HTTP " + code);
         cache.put(key, res);
         return res;
     }
@@ -69,7 +119,7 @@ public class BridgeClient {
         c.setConnectTimeout(7000);
         c.setReadTimeout(12000);
         c.setRequestProperty("X-Pin", pin);
-        if (c.getResponseCode() >= 400) { c.disconnect(); throw new Exception("Nessun file inviato dallo Z Flip"); }
+        if (c.getResponseCode() >= 400) { c.disconnect(); throw new Exception("Nessun file pronto sullo Z Flip"); }
         String hdrName = c.getHeaderField("X-Filename");
         DownloadedFile df = new DownloadedFile();
         df.name = (hdrName != null && !hdrName.isEmpty()) ? URLDecoder.decode(hdrName, "UTF-8") : "file_zflip.bin";

@@ -54,8 +54,8 @@ public class WatchUi {
         scroll.setFocusable(true);
         scroll.setFocusableInTouchMode(true);
 
-        int side = Math.max(dp(20), Math.round(widthPx * 0.115f));
-        int top = Math.max(dp(34), Math.round(dm.heightPixels * 0.15f));
+        int side = Math.max(dp(18), Math.round(widthPx * 0.11f));
+        int top = Math.max(dp(32), Math.round(dm.heightPixels * 0.14f));
         int bot = Math.max(dp(48), Math.round(dm.heightPixels * 0.22f));
 
         box = new LinearLayout(act);
@@ -184,13 +184,15 @@ public class WatchUi {
         Button b = new Button(act);
         b.setText(text);
         b.setAllCaps(false);
-        b.setTextSize(sp(11.5f));
+        b.setTextSize(sp(11f));
         b.setTypeface(null, Typeface.BOLD);
         b.setTextColor(Color.parseColor(fg));
         b.setBackground(pillBg(norm, press, stroke));
-        b.setPadding(dp(10), dp(6), dp(10), dp(6));
+        b.setPadding(dp(8), dp(6), dp(8), dp(6));
         b.setMinHeight(0);
         b.setMinimumHeight(0);
+        b.setMinWidth(0);
+        b.setMinimumWidth(0);
         return b;
     }
 
@@ -205,6 +207,8 @@ public class WatchUi {
         b.setPadding(dp(14), dp(9), dp(14), dp(9));
         b.setMinHeight(0);
         b.setMinimumHeight(0);
+        b.setMinWidth(0);
+        b.setMinimumWidth(0);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.setMargins(0, dp(4), 0, dp(4));
