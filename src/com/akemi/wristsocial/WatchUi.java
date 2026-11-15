@@ -160,10 +160,25 @@ public class WatchUi {
     public void playVideo(String url) {
         overlay.removeAllViews();
         overlay.setVisibility(View.VISIBLE);
+        final TextView bufTv = new TextView(act);
+        bufTv.setText("⏳ Avvio streaming...");
+        bufTv.setTextColor(Color.parseColor("#38BDF8"));
+        bufTv.setTextSize(sp(12f));
+        bufTv.setTypeface(null, Typeface.BOLD);
+        bufTv.setGravity(Gravity.CENTER);
+
         videoView = new VideoView(act);
         videoView.setLayoutParams(new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER));
-        videoView.setOnPreparedListener(mp -> mp.setLooping(true));
+        videoView.setOnPreparedListener(mp -> {
+            mp.setLooping(true);
+            bufTv.setVisibility(View.GONE);
+            mp.setOnInfoListener((m, what, extra) -> {
+                if (what == android.media.MediaPlayer.MEDIA_INFO_BUFFERING_START) bufTv.setVisibility(View.VISIBLE);
+                else if (what == android.media.MediaPlayer.MEDIA_INFO_BUFFERING_END) bufTv.setVisibility(View.GONE);
+                return false;
+            });
+        });
         videoView.setOnErrorListener((mp, w, e) -> { closeOverlay(); return true; });
         videoView.setOnClickListener(v -> {
             if (videoView.isPlaying()) videoView.pause();
@@ -188,6 +203,7 @@ public class WatchUi {
         vlp.bottomMargin = dp(28);
 
         overlay.addView(videoView);
+        overlay.addView(bufTv);
         overlay.addView(close, lp);
         overlay.addView(volHud, vlp);
         videoView.setVideoURI(Uri.parse(url));
@@ -418,6 +434,7 @@ public class WatchUi {
         vlp.bottomMargin = dp(28);
 
         overlay.addView(videoView);
+        overlay.addView(bufTv);
         overlay.addView(close, lp);
         overlay.addView(volHud, vlp);
         videoView.setVideoURI(Uri.parse(url));

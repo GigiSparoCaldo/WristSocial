@@ -45,6 +45,14 @@ public class RedditView {
         bSrc.setOnClickListener(v -> act.nav(() -> show(sub, sort, false), this::showSearch));
         act.addGapChip(sBar, bSrc, 5);
 
+        Button bTr = ui.chip(act.autoIt ? "🌐 IT: ON" : "🌐 IT: OFF", act.autoIt ? "#0284C7" : "#181E29", "#0369A1", "#2D3748", "#FFFFFF");
+        bTr.setOnClickListener(v -> {
+            act.autoIt = !act.autoIt;
+            act.getSharedPreferences("ws_prefs", android.content.Context.MODE_PRIVATE).edit().putBoolean("auto_it", act.autoIt).apply();
+            show(sub, sort, false);
+        });
+        act.addGapChip(sBar, bTr, 5);
+
         if (!sub.isEmpty() && !"popular".equalsIgnoreCase(sub)) {
             renderSubHeader(sub, sort);
         }
@@ -186,6 +194,12 @@ public class RedditView {
 
         final TextView tvT = ui.text(card, title, 13.5f, "#F8FAFC", true);
         if (act.autoIt) pool.execute(() -> { final String tr = api.translateIt(title); if (!tr.equals(title)) act.runOnUiThread(() -> tvT.setText(tr)); });
+        final String selfPreview = d.optString("selftext", "").trim();
+        if (!selfPreview.isEmpty()) {
+            final String cut = selfPreview.length() > 160 ? selfPreview.substring(0, 160) + "..." : selfPreview;
+            final TextView tvS = ui.text(card, cut, 12f, "#CBD5E1", false);
+            if (act.autoIt) pool.execute(() -> { final String tr = api.translateIt(cut); if (!tr.equals(cut)) act.runOnUiThread(() -> tvS.setText(tr)); });
+        }
 
         String vid = extractVideo(d);
         if (vid != null && !vid.isEmpty()) {
