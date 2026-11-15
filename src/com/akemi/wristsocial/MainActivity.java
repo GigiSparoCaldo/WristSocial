@@ -29,6 +29,7 @@ public class MainActivity extends Activity {
     public WatchUi ui;
     public BridgeClient api;
     private InstaView insta;
+    private FbView fb;
     private RedditView reddit;
     private DropNotifView dropNotif;
     public final ExecutorService pool = Executors.newFixedThreadPool(3);
@@ -58,6 +59,7 @@ public class MainActivity extends Activity {
         geminiThink = p.getString("gm_think", "medio");
 
         insta = new InstaView(this, ui, api, pool);
+        fb = new FbView(this, ui, api, pool);
         reddit = new RedditView(this, ui, api, pool);
         dropNotif = new DropNotifView(this, ui, api, pool);
         insta.show("home", false);
@@ -137,11 +139,15 @@ public class MainActivity extends Activity {
         addGapChip(r1, bSet, 5);
 
         LinearLayout r2 = ui.hBar(2, 6);
-        boolean isIg = "ig".equals(tab), isRd = "rd".equals(tab), isNw = "nw".equals(tab), isGm = "gm".equals(tab);
+        boolean isIg = "ig".equals(tab), isFb = "fb".equals(tab), isRd = "rd".equals(tab), isNw = "nw".equals(tab), isGm = "gm".equals(tab);
 
         Button bIg = ui.chip("Instagram", isIg ? "#DB2777" : "#141923", "#BE185D", isIg ? null : "#2A3447", "#FFFFFF");
         bIg.setOnClickListener(v -> insta.show("home", false));
         r2.addView(bIg);
+
+        Button bFb = ui.chip("Facebook", isFb ? "#1D4ED8" : "#141923", "#1E40AF", isFb ? null : "#2A3447", "#FFFFFF");
+        bFb.setOnClickListener(v -> fb.show(false));
+        addGapChip(r2, bFb, 5);
 
         Button bRd = ui.chip("Reddit", isRd ? "#EA580C" : "#141923", "#C2410C", isRd ? null : "#2A3447", "#FFFFFF");
         bRd.setOnClickListener(v -> reddit.show("", "hot", false));
