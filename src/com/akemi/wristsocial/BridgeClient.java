@@ -9,17 +9,13 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.Inet4Address;
 import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
-import java.net.Socket;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -28,8 +24,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.json.JSONArray;
 
 public class BridgeClient {
-    public String host = "http://192.168.1.2:8765";
-    public String pin = "1234";
+    public String host = "http://192.168.1.12:8765";
+    public String pin = "7827";
 
     private final LruCache<String, String> cache = new LruCache<>(25);
     private final LruCache<String, String> trCache = new LruCache<>(200);
@@ -41,15 +37,16 @@ public class BridgeClient {
 
     public String discoverHost() {
         Set<String> candidates = new LinkedHashSet<>();
-        candidates.add("10.0.0.1");
         candidates.add("192.168.43.1");
         candidates.add("172.20.10.1");
+        for (int i = 1; i <= 254; i++) candidates.add("192.168.1." + i);
+        for (int i = 1; i <= 254; i++) candidates.add("192.168.0." + i);
         try {
             for (NetworkInterface ni : Collections.list(NetworkInterface.getNetworkInterfaces())) {
                 for (InetAddress addr : Collections.list(ni.getInetAddresses())) {
                     if (!addr.isLoopbackAddress() && addr instanceof Inet4Address) {
                         String ip = addr.getHostAddress();
-                        if (ip != null && ip.contains(".")) {
+                        if (ip != null && ip.contains(".") && !ip.startsWith("10.0.0.")) {
                             String prefix = ip.substring(0, ip.lastIndexOf('.') + 1);
                             for (int i = 1; i <= 254; i++) candidates.add(prefix + i);
                         }
@@ -59,18 +56,25 @@ public class BridgeClient {
         } catch (Exception ignored) {}
 
         final AtomicReference<String> found = new AtomicReference<>(null);
-        ExecutorService scanPool = Executors.newFixedThreadPool(24);
+        ExecutorService scanPool = Executors.newFixedThreadPool(32);
         for (final String ip : candidates) {
             scanPool.execute(() -> {
                 if (found.get() != null) return;
-                try (Socket s = new Socket()) {
-                    s.connect(new InetSocketAddress(ip, 8765), 250);
-                    found.compareAndSet(null, "http://" + ip + ":8765");
+                try {
+                    HttpURLConnection c = (HttpURLConnection) new URL("http://" + ip + ":8765/ping").openConnection();
+                    c.setConnectTimeout(350);
+                    c.setReadTimeout(450);
+                    c.setRequestProperty("X-Pin", pin);
+                    int code = c.getResponseCode();
+                    c.disconnect();
+                    if (code == 200 || code == 401) {
+                        found.compareAndSet(null, "http://" + ip + ":8765");
+                    }
                 } catch (Exception ignored) {}
             });
         }
         scanPool.shutdown();
-        try { scanPool.awaitTermination(3, TimeUnit.SECONDS); } catch (Exception ignored) {}
+        try { scanPool.awaitTermination(4, TimeUnit.SECONDS); } catch (Exception ignored) {}
         scanPool.shutdownNow();
         return found.get();
     }
