@@ -3,13 +3,11 @@ package com.akemi.wristsocial;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.view.Gravity;
-import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 import java.net.URLEncoder;
 import java.util.concurrent.ExecutorService;
 import org.json.JSONArray;
@@ -35,11 +33,11 @@ public class InstaView {
         subBar.addView(bHome);
 
         Button bExp = ui.chip("Esplora", "explore".equals(mode) ? "#DB2777" : "#181E29", "#BE185D", "#2D3748", "#FFFFFF");
-        bExp.setOnClickListener(v -> show("explore", false));
+        bExp.setOnClickListener(v -> show("explore", true));
         act.addGapChip(subBar, bExp, 5);
 
         Button bSav = ui.chip("Salvati", "saved".equals(mode) ? "#DB2777" : "#181E29", "#BE185D", "#2D3748", "#FFFFFF");
-        bSav.setOnClickListener(v -> show("saved", false));
+        bSav.setOnClickListener(v -> show("saved", true));
         act.addGapChip(subBar, bSav, 5);
 
         Button bSrc = ui.chip("🔍 Cerca", "#181E29", "#263042", "#2D3748", "#38BDF8");
@@ -52,9 +50,9 @@ public class InstaView {
         pool.execute(() -> {
             try {
                 final JSONArray stories = "home".equals(mode)
-                        ? new JSONObject(api.get("/ig/stories", force)).optJSONArray("stories") : null;
+                        ? new JSONObject(api.get("/ig/stories", true)).optJSONArray("stories") : null;
                 String ep = "explore".equals(mode) ? "/ig/explore" : "saved".equals(mode) ? "/ig/saved" : "/ig/feed";
-                JSONObject jFeed = new JSONObject(api.get(ep, force));
+                JSONObject jFeed = new JSONObject(api.get(ep, force || !"home".equals(mode)));
                 final JSONArray items = jFeed.optJSONArray("items");
                 final String nextMax = jFeed.optString("next", "");
 
@@ -67,7 +65,7 @@ public class InstaView {
                         }
                     }
                     if (items == null || items.length() == 0) {
-                        ui.text(ui.box, "Nessun post trovato.", 12f, "#E2E8F0", false);
+                        ui.text(ui.box, "Nessun post trovato. Tocca ↻ per ricaricare.", 12f, "#E2E8F0", false);
                         return;
                     }
                     for (int i = 0; i < items.length(); i++) {
@@ -79,6 +77,29 @@ public class InstaView {
                     }
                 });
             } catch (Exception e) { act.runOnUiThread(() -> ld.setText("Errore IG: " + e.getMessage())); }
+        });
+    }
+
+    public void showTag(final String tag) {
+        ui.clear();
+        Button back = ui.chip("← Indietro", "#181E29", "#263042", "#2D3748", "#FFFFFF");
+        back.setOnClickListener(v -> act.onBackPressed());
+        ui.box.addView(back);
+        ui.text(ui.box, "#" + tag, 15f, "#F472B6", true);
+        final TextView ld = ui.text(ui.box, "Caricamento post #" + tag + "...", 12.5f, "#94A3B8", false);
+
+        pool.execute(() -> {
+            try {
+                final JSONArray items = new JSONObject(api.get("/ig/tag?tag=" + URLEncoder.encode(tag, "UTF-8"), true)).optJSONArray("items");
+                act.runOnUiThread(() -> {
+                    ui.box.removeView(ld);
+                    if (items == null || items.length() == 0) { ui.text(ui.box, "Nessun post trovato.", 12f, "#E2E8F0", false); return; }
+                    for (int i = 0; i < items.length(); i++) {
+                        JSONObject m = items.optJSONObject(i);
+                        if (m != null) renderCard(m, () -> showTag(tag));
+                    }
+                });
+            } catch (Exception e) { act.runOnUiThread(() -> ld.setText("Errore tag: " + e.getMessage())); }
         });
     }
 
@@ -149,7 +170,7 @@ public class InstaView {
                 JSONArray items = new JSONObject(api.get("/ig/story?id=" + URLEncoder.encode(reelId, "UTF-8"), true)).optJSONArray("items");
                 act.runOnUiThread(() -> {
                     ui.box.removeView(ld);
-                    if (items == null || items.length() == 0) { ui.text(ui.box, "Nessuna storia attiva trovata.", 12.5f, "#E2E8F0", false); return; }
+                    if (items == null || items.length() == 0) { ui.text(ui.box, "Nessuna storia attiva per @" + user + ".", 12.5f, "#E2E8F0", false); return; }
                     for (int i = 0; i < items.length(); i++) {
                         JSONObject it = items.optJSONObject(i);
                         String img = it.optString("img", "");
@@ -175,7 +196,7 @@ public class InstaView {
 
         pool.execute(() -> {
             try {
-                JSONObject p = new JSONObject(api.get("/ig/profile?user=" + URLEncoder.encode(username, "UTF-8"), false));
+                JSONObject p = new JSONObject(api.get("/ig/profile?user=" + URLEncoder.encode(username, "UTF-8"), true));
                 final String uid = p.optString("id", ""), name = p.optString("name", ""), bio = p.optString("bio", ""), av = p.optString("avatar", "");
                 final int postsCnt = p.optInt("posts_count", 0), followers = p.optInt("followers", 0), following = p.optInt("following", 0);
                 final boolean followed = p.optBoolean("followed", false);
@@ -284,7 +305,7 @@ public class InstaView {
 
         Button go = ui.pill("🔍 Cerca su Instagram", "#DB2777", "#BE185D", null, "#FFFFFF");
         go.setOnClickListener(v -> {
-            final String q = et.getText().toString().trim();
+            final String q = et.getText().toString().trim().replaceFirst("^#", "");
             if (q.isEmpty()) return;
             resBox.removeAllViews();
             ui.text(resBox, "Ricerca in corso...", 12f, "#94A3B8", false);
@@ -294,6 +315,10 @@ public class InstaView {
                     final JSONArray users = j.optJSONArray("users"), tags = j.optJSONArray("tags");
                     act.runOnUiThread(() -> {
                         resBox.removeAllViews();
+                        if ((users == null || users.length() == 0) && (tags == null || tags.length() == 0)) {
+                            ui.text(resBox, "Nessun risultato trovato.", 12f, "#E2E8F0", false);
+                            return;
+                        }
                         if (users != null) {
                             for (int i = 0; i < users.length(); i++) {
                                 JSONObject u = users.optJSONObject(i);
@@ -306,7 +331,10 @@ public class InstaView {
                         if (tags != null) {
                             for (int i = 0; i < tags.length(); i++) {
                                 JSONObject t = tags.optJSONObject(i);
-                                ui.text(resBox, "#" + t.optString("name", "") + " (" + t.optInt("count", 0) + " post)", 12f, "#38BDF8", true);
+                                final String tn = t.optString("name", "");
+                                Button bTag = ui.pill("#" + tn + " (" + t.optInt("count", 0) + ")", "#172033", "#1E293B", "#38BDF8", "#38BDF8");
+                                bTag.setOnClickListener(v2 -> act.nav(this::showSearch, () -> showTag(tn)));
+                                resBox.addView(bTag);
                             }
                         }
                     });
