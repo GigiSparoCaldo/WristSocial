@@ -38,6 +38,11 @@ public class MainActivity extends Activity {
     public boolean autoIt = true;
     private String geminiModel = "Auto";
     private String geminiThink = "medio";
+    private boolean geminiBusy = false;
+    private int geminiReqSeq = 0;
+    private int editingIdx = -1;
+    private int editingFromEnd = -1;
+    private String editingDraft = "";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -151,7 +156,7 @@ public class MainActivity extends Activity {
         addGapChip(r2, bGm, 5);
     }
 
-    // ==================== GEMINI AI CON MODELLI REALI DEL TUO ACCOUNT ====================
+    // ==================== GEMINI AI CON STOP E MODIFICA PROMPT ====================
 
     private void showGemini() {
         ui.clear();
@@ -160,7 +165,7 @@ public class MainActivity extends Activity {
         LinearLayout gBar = ui.hBar(2, 4);
         Button bNew = ui.chip("➕ Nuova", "#1E1B4B", "#312E81", "#6366F1", "#C7D2FE");
         bNew.setOnClickListener(v -> {
-            geminiHistory.clear();
+            geminiHistory.clear(); editingIdx = -1; editingDraft = ""; geminiBusy = false; geminiReqSeq++;
             pool.execute(() -> { try { api.get("/gemini/new", true); } catch (Exception ignored) {} });
             showGemini();
         });
@@ -189,48 +194,120 @@ public class MainActivity extends Activity {
         }
 
         final EditText et = new EditText(this);
-        et.setHint("Chiedi a Gemini...");
+        et.setHint(editingIdx >= 0 ? "Modifica il tuo prompt..." : "Chiedi a Gemini...");
+        if (!editingDraft.isEmpty()) et.setText(editingDraft);
         et.setHintTextColor(Color.parseColor("#64748B")); et.setTextColor(Color.WHITE);
-        et.setBackground(ui.roundBox("#141923", "#7C3AED", 18));
+        et.setBackground(ui.roundBox("#141923", editingIdx >= 0 ? "#F59E0B" : "#7C3AED", 18));
         et.setPadding(ui.dp(12), ui.dp(10), ui.dp(12), ui.dp(10));
         ui.box.addView(et);
 
-        final Button askBtn = ui.pill("✨ Invia a Gemini", "#7C3AED", "#6D28D9", null, "#FFFFFF");
-        askBtn.setOnClickListener(v -> {
-            final String q = et.getText().toString().trim();
-            if (q.isEmpty()) return;
-            askBtn.setText("Gemini sta ragionando..."); askBtn.setEnabled(false);
-            pool.execute(() -> {
-                try {
-                    String u = "/gemini/ask?q=" + URLEncoder.encode(q, "UTF-8")
-                            + "&model=" + URLEncoder.encode(geminiModel, "UTF-8") + "&think=" + geminiThink;
-                    String reply = new JSONObject(api.get(u, true)).optString("reply", "Nessuna risposta.");
-                    geminiHistory.add(0, new String[]{"Tu", q});
-                    geminiHistory.add(1, new String[]{"Gemini", reply});
-                    runOnUiThread(this::showGemini);
-                } catch (Exception e) {
-                    runOnUiThread(() -> { askBtn.setText("Errore: " + e.getMessage()); askBtn.setEnabled(true); });
-                }
+        if (geminiBusy) {
+            Button stopBtn = ui.pill("⏹ Ferma generazione", "#DC2626", "#B91C1C", "#F87171", "#FFFFFF");
+            stopBtn.setOnClickListener(v -> {
+                geminiBusy = false;
+                geminiReqSeq++;
+                pool.execute(() -> { try { api.get("/gemini/stop", true); } catch (Exception ignored) {} });
+                Toast.makeText(this, "Richiesta bloccata", Toast.LENGTH_SHORT).show();
+                showGemini();
             });
-        });
-        ui.box.addView(askBtn);
+            ui.box.addView(stopBtn);
+        } else {
+            String btnLabel = editingIdx >= 0 ? "✨ Aggiorna risposta" : "✨ Invia a Gemini";
+            Button askBtn = ui.pill(btnLabel, editingIdx >= 0 ? "#D97706" : "#7C3AED", "#6D28D9", null, "#FFFFFF");
+            askBtn.setOnClickListener(v -> {
+                final String q = et.getText().toString().trim();
+                if (q.isEmpty()) return;
+                final int editPos = editingIdx;
+                final int editOff = editingFromEnd;
+                geminiBusy = true;
+                final int mySeq = ++geminiReqSeq;
+                showGemini();
 
-        for (final String[] turn : geminiHistory) {
-            LinearLayout card = ui.card();
-            boolean isUser = "Tu".equals(turn[0]);
-            ui.text(card, turn[0], 11f, isUser ? "#C4B5FD" : "#38BDF8", true);
-            ui.text(card, turn[1], 13f, "#F8FAFC", false);
-            if (!isUser) {
-                Button bCopy = ui.pill("📋 Copia", "#141923", "#222B3A", "#334155", "#38BDF8");
-                bCopy.setOnClickListener(v -> {
-                    ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-                    if (cm != null) cm.setPrimaryClip(ClipData.newPlainText("Gemini", turn[1]));
-                    Toast.makeText(this, "Copiato!", Toast.LENGTH_SHORT).show();
+                pool.execute(() -> {
+                    try {
+                        String u = editPos >= 0
+                                ? "/gemini/edit?idx=" + editOff + "&q=" + URLEncoder.encode(q, "UTF-8")
+                                  + "&model=" + URLEncoder.encode(geminiModel, "UTF-8") + "&think=" + geminiThink
+                                : "/gemini/ask?q=" + URLEncoder.encode(q, "UTF-8")
+                                  + "&model=" + URLEncoder.encode(geminiModel, "UTF-8") + "&think=" + geminiThink;
+                        String reply = new JSONObject(api.get(u, true)).optString("reply", "Nessuna risposta.");
+                        runOnUiThread(() -> {
+                            if (mySeq != geminiReqSeq) return;
+                            geminiBusy = false;
+                            if (editPos >= 0 && editPos < geminiHistory.size()) {
+                                geminiHistory.subList(editPos, geminiHistory.size()).clear();
+                            }
+                            geminiHistory.add(new String[]{"Tu", q});
+                            geminiHistory.add(new String[]{"Gemini", reply});
+                            editingIdx = -1; editingFromEnd = -1; editingDraft = "";
+                            showGemini();
+                        });
+                    } catch (Exception e) {
+                        runOnUiThread(() -> {
+                            if (mySeq != geminiReqSeq) return;
+                            geminiBusy = false;
+                            Toast.makeText(this, "Errore: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                            showGemini();
+                        });
+                    }
                 });
-                card.addView(bCopy);
+            });
+            ui.box.addView(askBtn);
+
+            if (editingIdx >= 0) {
+                Button cancelEdit = ui.pill("✕ Annulla modifica", "#181E29", "#263042", "#475569", "#CBD5E1");
+                cancelEdit.setOnClickListener(v -> { editingIdx = -1; editingFromEnd = -1; editingDraft = ""; showGemini(); });
+                ui.box.addView(cancelEdit);
             }
-            ui.box.addView(card);
         }
+
+        // Mostra i turni dal più recente in alto mantenendo ogni domanda sopra la sua risposta
+        int i = geminiHistory.size() - 1;
+        while (i >= 0) {
+            int qIdx = i;
+            int aIdx = -1;
+            if (i > 0 && "Gemini".equals(geminiHistory.get(i)[0]) && "Tu".equals(geminiHistory.get(i - 1)[0])) {
+                qIdx = i - 1;
+                aIdx = i;
+                i -= 2;
+            } else {
+                i -= 1;
+            }
+            renderGeminiTurnCard(qIdx, false);
+            if (aIdx >= 0) renderGeminiTurnCard(aIdx, true);
+        }
+    }
+
+    private void renderGeminiTurnCard(final int idx, boolean isAnswer) {
+        final String[] turn = geminiHistory.get(idx);
+        LinearLayout card = ui.card();
+        ui.text(card, turn[0], 11f, isAnswer ? "#38BDF8" : "#C4B5FD", true);
+        ui.text(card, turn[1], 13f, "#F8FAFC", false);
+
+        if (!isAnswer) {
+            int uAfter = 0;
+            for (int k = idx + 1; k < geminiHistory.size(); k++) {
+                if ("Tu".equals(geminiHistory.get(k)[0])) uAfter++;
+            }
+            final int fromEnd = uAfter;
+            Button bEdit = ui.pill("✏️ Modifica", "#141923", "#222B3A", "#F59E0B", "#FBBF24");
+            bEdit.setOnClickListener(v -> {
+                editingIdx = idx;
+                editingFromEnd = fromEnd;
+                editingDraft = turn[1];
+                showGemini();
+            });
+            card.addView(bEdit);
+        } else {
+            Button bCopy = ui.pill("📋 Copia", "#141923", "#222B3A", "#334155", "#38BDF8");
+            bCopy.setOnClickListener(v -> {
+                ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                if (cm != null) cm.setPrimaryClip(ClipData.newPlainText("Gemini", turn[1]));
+                Toast.makeText(this, "Copiato!", Toast.LENGTH_SHORT).show();
+            });
+            card.addView(bCopy);
+        }
+        ui.box.addView(card);
     }
 
     private void showGeminiModelPicker() {
@@ -268,7 +345,7 @@ public class MainActivity extends Activity {
                         }
                     }
                 });
-            } catch (Exception e) { runOnUiThread(() -> ld.setText("Errore lettura modelli: " + e.getMessage())); }
+            } catch (Exception e) { runOnUiThread(() -> ld.setText("Errore modelli: " + e.getMessage())); }
         });
     }
 
@@ -306,6 +383,7 @@ public class MainActivity extends Activity {
             try {
                 JSONArray turns = new JSONObject(api.get("/gemini/open?url=" + URLEncoder.encode(url, "UTF-8"), true)).optJSONArray("turns");
                 geminiHistory.clear();
+                editingIdx = -1; editingDraft = "";
                 if (turns != null) {
                     for (int i = 0; i < turns.length(); i++) {
                         JSONObject t = turns.optJSONObject(i);
