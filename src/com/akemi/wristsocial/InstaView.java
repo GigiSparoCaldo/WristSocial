@@ -47,12 +47,27 @@ public class InstaView {
         final LinearLayout storyRow = "home".equals(mode) ? ui.hBar(2, 4) : null;
         final TextView ld = ui.text(ui.box, "Caricamento Instagram...", 12.5f, "#94A3B8", false);
 
+        if ("home".equals(mode) && storyRow != null) {
+            pool.execute(() -> {
+                try {
+                    final JSONArray stories = new JSONObject(api.get("/ig/stories", force)).optJSONArray("stories");
+                    act.runOnUiThread(() -> {
+                        if (stories != null) {
+                            for (int i = 0; i < stories.length(); i++) {
+                                JSONObject st = stories.optJSONObject(i);
+                                if (st != null) addStoryBubble(storyRow, st, () -> show(mode, false));
+                            }
+                        }
+                    });
+                } catch (Exception ignored) {}
+            });
+        }
+
         pool.execute(() -> {
             try {
-                final JSONArray stories = "home".equals(mode)
-                        ? new JSONObject(api.get("/ig/stories", true)).optJSONArray("stories") : null;
+                final JSONArray stories = null;
                 String ep = "explore".equals(mode) ? "/ig/explore" : "saved".equals(mode) ? "/ig/saved" : "/ig/feed";
-                JSONObject jFeed = new JSONObject(api.get(ep, force || !"home".equals(mode)));
+                JSONObject jFeed = new JSONObject(api.get(ep, force));
                 final JSONArray items = jFeed.optJSONArray("items");
                 final String nextMax = jFeed.optString("next", "");
 

@@ -32,7 +32,10 @@ public class MainActivity extends Activity {
     private FbView fb;
     private RedditView reddit;
     private DropNotifView dropNotif;
-    public final ExecutorService pool = Executors.newFixedThreadPool(3);
+    public final ExecutorService pool = Executors.newFixedThreadPool(4);
+    private final ExecutorService imgPool = Executors.newFixedThreadPool(4);
+    private float swipeX0 = 0f, swipeY0 = 0f;
+    private boolean swipeTracking = false;
     private final List<Runnable> backStack = new ArrayList<>();
     private final List<String[]> geminiHistory = new ArrayList<>();
     public boolean imagesOnTap = true;
@@ -74,6 +77,29 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (ui != null) {
+            int act = ev.getActionMasked();
+            if (act == MotionEvent.ACTION_DOWN) {
+                swipeX0 = ev.getX();
+                swipeY0 = ev.getY();
+                swipeTracking = swipeX0 <= ui.dp(42);
+            } else if (act == MotionEvent.ACTION_UP && swipeTracking) {
+                swipeTracking = false;
+                float dx = ev.getX() - swipeX0;
+                float dy = Math.abs(ev.getY() - swipeY0);
+                if (dx > ui.dp(60) && dx > dy * 1.35f) {
+                    onBackPressed();
+                    return true;
+                }
+            } else if (act == MotionEvent.ACTION_CANCEL) {
+                swipeTracking = false;
+            }
+        }
+        return super.dispatchTouchEvent(ev);
+    }
+
+    @Override
     public boolean dispatchGenericMotionEvent(MotionEvent ev) {
         if (ui != null && ui.onRotary(ev)) return true;
         return super.dispatchGenericMotionEvent(ev);
@@ -90,6 +116,7 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         if (ui != null) ui.closeOverlay();
         pool.shutdownNow();
+        imgPool.shutdownNow();
         super.onDestroy();
     }
 
@@ -533,7 +560,7 @@ public class MainActivity extends Activity {
     }
 
     private void loadImg(final String url, final ImageView target) {
-        pool.execute(() -> {
+        imgPool.execute(() -> {
             try {
                 final Bitmap bmp = api.getProxiedImage(url);
                 if (bmp != null) runOnUiThread(() -> { target.setImageBitmap(bmp); target.setOnClickListener(v -> ui.showImage(bmp)); });
