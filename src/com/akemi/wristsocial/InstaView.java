@@ -144,7 +144,7 @@ public class InstaView {
     }
 
     public void addStoryBubble(LinearLayout row, JSONObject st, final Runnable back) {
-        final String id = st.optString("id", ""), user = st.optString("user", ""), av = st.optString("avatar", "");
+        final String id = st.optString("id", ""), uid = st.optString("uid", id), user = st.optString("user", ""), av = st.optString("avatar", "");
         LinearLayout item = new LinearLayout(act);
         item.setOrientation(LinearLayout.VERTICAL); item.setGravity(Gravity.CENTER);
         item.setPadding(ui.dp(5), ui.dp(4), ui.dp(5), ui.dp(4));
@@ -157,7 +157,7 @@ public class InstaView {
         tv.setText(user.length() > 9 ? user.substring(0, 9) : user);
         tv.setTextColor(Color.parseColor("#CBD5E1")); tv.setTextSize(ui.sp(9.5f));
         item.addView(tv);
-        item.setOnClickListener(v -> act.nav(back, () -> openStory(id, user)));
+        item.setOnClickListener(v -> act.nav(back, () -> openStory(id, uid, user)));
         row.addView(item);
         if (!av.isEmpty()) {
             pool.execute(() -> {
@@ -169,20 +169,20 @@ public class InstaView {
         }
     }
 
-    public void openStory(final String reelId, final String user) {
+    public void openStory(final String reelId, final String userId, final String user) {
         ui.clear();
         LinearLayout top = ui.hBar(0, 6);
         Button back = ui.chip("← Indietro", "#181E29", "#263042", "#2D3748", "#FFFFFF");
         back.setOnClickListener(v -> act.onBackPressed());
         top.addView(back);
         Button bProf = ui.chip("👤 @" + user, "#181E29", "#263042", "#EC4899", "#F472B6");
-        bProf.setOnClickListener(v -> act.nav(() -> openStory(reelId, user), () -> showProfile(user)));
+        bProf.setOnClickListener(v -> act.nav(() -> openStory(reelId, userId, user), () -> showProfile(user)));
         act.addGapChip(top, bProf, 5);
 
         final TextView ld = ui.text(ui.box, "Caricamento storia di @" + user + "...", 12.5f, "#94A3B8", false);
         pool.execute(() -> {
             try {
-                JSONArray items = new JSONObject(api.get("/ig/story?id=" + URLEncoder.encode(reelId, "UTF-8"), true)).optJSONArray("items");
+                JSONArray items = new JSONObject(api.get("/ig/story?id=" + URLEncoder.encode(reelId, "UTF-8") + "&uid=" + URLEncoder.encode(userId, "UTF-8"), true)).optJSONArray("items");
                 act.runOnUiThread(() -> {
                     ui.box.removeView(ld);
                     if (items == null || items.length() == 0) { ui.text(ui.box, "Nessuna storia attiva per @" + user + ".", 12.5f, "#E2E8F0", false); return; }
@@ -245,7 +245,7 @@ public class InstaView {
                         hdr.addView(bFol);
 
                         Button bSt = ui.pill("⭕ Guarda Storie", "#172033", "#1E293B", "#EC4899", "#F472B6");
-                        bSt.setOnClickListener(v -> act.nav(() -> showProfile(username), () -> openStory(uid, username)));
+                        bSt.setOnClickListener(v -> act.nav(() -> showProfile(username), () -> openStory(uid, uid, username)));
                         hdr.addView(bSt);
                     }
                     ui.box.addView(hdr);
