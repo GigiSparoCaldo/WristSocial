@@ -38,6 +38,8 @@ public class MainActivity extends Activity {
     private final List<String[]> geminiHistory = new ArrayList<>();
     private boolean imagesOnTap = true;
     private boolean autoIt = true;
+    private String geminiModel = "auto";
+    private String geminiThink = "medio";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -49,6 +51,8 @@ public class MainActivity extends Activity {
         api.pin = p.getString("pin", "7827");
         imagesOnTap = p.getBoolean("img_tap", true);
         autoIt = p.getBoolean("auto_it", true);
+        geminiModel = p.getString("gm_model", "auto");
+        geminiThink = p.getString("gm_think", "medio");
         dropNotif = new DropNotifView(this, ui, api, pool);
         showInsta(false);
     }
@@ -92,77 +96,107 @@ public class MainActivity extends Activity {
         reload.run();
     }
 
-    private void topBar(String tab, final Runnable reloadCache, final Runnable reloadForce) {
-        LinearLayout r1 = new LinearLayout(this);
-        r1.setOrientation(LinearLayout.HORIZONTAL);
-        r1.setGravity(Gravity.CENTER);
-
-        Button bNotif = ui.chip("🔔", "#181E29", "#263042", "#2D3748", "#FBBF24");
-        bNotif.setOnClickListener(v -> nav(reloadCache, () -> dropNotif.showNotifs(this::onBackPressed)));
-
-        Button bDrop = ui.chip("📋", "#181E29", "#263042", "#2D3748", "#34D399");
-        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        dlp.leftMargin = ui.dp(3); bDrop.setLayoutParams(dlp);
-        bDrop.setOnClickListener(v -> nav(reloadCache, () -> dropNotif.showDrop(this::onBackPressed)));
-
-        Button bDm = ui.chip("DM", "#181E29", "#263042", "#2D3748", "#F472B6");
-        LinearLayout.LayoutParams mlp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        mlp.leftMargin = ui.dp(3); bDm.setLayoutParams(mlp);
-        bDm.setOnClickListener(v -> nav(reloadCache, () -> showDm(false)));
-
-        Button bAa = ui.chip("Aa", "#181E29", "#263042", "#2D3748", "#38BDF8");
-        LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        alp.leftMargin = ui.dp(3); bAa.setLayoutParams(alp);
-        bAa.setOnClickListener(v -> cycleFont(reloadCache));
-
-        Button bSet = ui.chip("⚙", "#181E29", "#263042", "#2D3748", "#94A3B8");
-        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        slp.leftMargin = ui.dp(3); bSet.setLayoutParams(slp);
-        bSet.setOnClickListener(v -> nav(reloadCache, this::showSettings));
-
-        Button bRef = ui.chip("↻", "#181E29", "#263042", "#2D3748", "#34D399");
-        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        rlp.leftMargin = ui.dp(3); bRef.setLayoutParams(rlp);
-        bRef.setOnClickListener(v -> reloadForce.run());
-
-        r1.addView(bNotif); r1.addView(bDrop); r1.addView(bDm); r1.addView(bAa); r1.addView(bSet); r1.addView(bRef);
-        ui.box.addView(r1);
-
-        LinearLayout r2 = new LinearLayout(this);
-        r2.setOrientation(LinearLayout.HORIZONTAL);
-        r2.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams r2lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        r2lp.setMargins(0, ui.dp(5), 0, ui.dp(5));
-        r2.setLayoutParams(r2lp);
-
-        boolean isIg = "ig".equals(tab), isRd = "rd".equals(tab), isNw = "nw".equals(tab), isGm = "gm".equals(tab);
-        Button bIg = ui.chip("IG", isIg ? "#DB2777" : "#141923", "#BE185D", isIg ? null : "#2A3447", "#FFFFFF");
-        Button bRd = ui.chip("Reddit", isRd ? "#EA580C" : "#141923", "#C2410C", isRd ? null : "#2A3447", "#FFFFFF");
-        Button bNw = ui.chip("News", isNw ? "#0284C7" : "#141923", "#0369A1", isNw ? null : "#2A3447", "#FFFFFF");
-        Button bGm = ui.chip("Gemini", isGm ? "#7C3AED" : "#141923", "#6D28D9", isGm ? null : "#2A3447", "#FFFFFF");
-
-        LinearLayout.LayoutParams p1 = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        LinearLayout.LayoutParams p2 = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        p2.leftMargin = ui.dp(3);
-        bIg.setLayoutParams(p1); bRd.setLayoutParams(p2); bNw.setLayoutParams(p2); bGm.setLayoutParams(p2);
-
-        bIg.setOnClickListener(v -> showInsta(false));
-        bRd.setOnClickListener(v -> showReddit("", "hot", false));
-        bNw.setOnClickListener(v -> showNews(false));
-        bGm.setOnClickListener(v -> showGemini());
-
-        r2.addView(bIg); r2.addView(bRd); r2.addView(bNw); r2.addView(bGm);
-        ui.box.addView(r2);
+    private void addGapChip(LinearLayout row, Button b, int leftDp) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.leftMargin = ui.dp(leftDp);
+        b.setLayoutParams(lp);
+        row.addView(b);
     }
 
-    // ==================== GEMINI PERSONALE (Z FLIP) ====================
+    private void topBar(String tab, final Runnable reloadCache, final Runnable reloadForce) {
+        LinearLayout r1 = ui.hBar(0, 4);
+        Button bNotif = ui.chip("🔔 Notif", "#181E29", "#263042", "#2D3748", "#FBBF24");
+        bNotif.setOnClickListener(v -> nav(reloadCache, () -> dropNotif.showNotifs(this::onBackPressed)));
+        r1.addView(bNotif);
+
+        Button bDrop = ui.chip("📋 Drop", "#181E29", "#263042", "#2D3748", "#34D399");
+        bDrop.setOnClickListener(v -> nav(reloadCache, () -> dropNotif.showDrop(this::onBackPressed)));
+        addGapChip(r1, bDrop, 5);
+
+        Button bDm = ui.chip("💬 DM", "#181E29", "#263042", "#2D3748", "#F472B6");
+        bDm.setOnClickListener(v -> nav(reloadCache, () -> showDm(false)));
+        addGapChip(r1, bDm, 5);
+
+        Button bAa = ui.chip("Aa", "#181E29", "#263042", "#2D3748", "#38BDF8");
+        bAa.setOnClickListener(v -> cycleFont(reloadCache));
+        addGapChip(r1, bAa, 5);
+
+        Button bRef = ui.chip("↻", "#181E29", "#263042", "#2D3748", "#34D399");
+        bRef.setOnClickListener(v -> reloadForce.run());
+        addGapChip(r1, bRef, 5);
+
+        Button bSet = ui.chip("⚙", "#181E29", "#263042", "#2D3748", "#94A3B8");
+        bSet.setOnClickListener(v -> nav(reloadCache, this::showSettings));
+        addGapChip(r1, bSet, 5);
+
+        LinearLayout r2 = ui.hBar(2, 6);
+        boolean isIg = "ig".equals(tab), isRd = "rd".equals(tab), isNw = "nw".equals(tab), isGm = "gm".equals(tab);
+
+        Button bIg = ui.chip("Instagram", isIg ? "#DB2777" : "#141923", "#BE185D", isIg ? null : "#2A3447", "#FFFFFF");
+        bIg.setOnClickListener(v -> showInsta(false));
+        r2.addView(bIg);
+
+        Button bRd = ui.chip("Reddit", isRd ? "#EA580C" : "#141923", "#C2410C", isRd ? null : "#2A3447", "#FFFFFF");
+        bRd.setOnClickListener(v -> showReddit("", "hot", false));
+        addGapChip(r2, bRd, 5);
+
+        Button bNw = ui.chip("Google News", isNw ? "#0284C7" : "#141923", "#0369A1", isNw ? null : "#2A3447", "#FFFFFF");
+        bNw.setOnClickListener(v -> showNews(false));
+        addGapChip(r2, bNw, 5);
+
+        Button bGm = ui.chip("Gemini AI", isGm ? "#7C3AED" : "#141923", "#6D28D9", isGm ? null : "#2A3447", "#FFFFFF");
+        bGm.setOnClickListener(v -> showGemini());
+        addGapChip(r2, bGm, 5);
+    }
+
+    // ==================== GEMINI AI AVANZATO ====================
 
     private void showGemini() {
         ui.clear();
         topBar("gm", this::showGemini, this::showGemini);
 
+        // Barra azioni chat: Nuova Chat | Vecchie Chat | Modello
+        LinearLayout gBar = ui.hBar(2, 4);
+        Button bNew = ui.chip("➕ Nuova", "#1E1B4B", "#312E81", "#6366F1", "#C7D2FE");
+        bNew.setOnClickListener(v -> {
+            geminiHistory.clear();
+            pool.execute(() -> { try { api.get("/gemini/new", true); } catch (Exception ignored) {} });
+            showGemini();
+        });
+        gBar.addView(bNew);
+
+        Button bHist = ui.chip("🗂 Vecchie Chat", "#1E1B4B", "#312E81", "#6366F1", "#C7D2FE");
+        bHist.setOnClickListener(v -> nav(this::showGemini, this::showGeminiChats));
+        addGapChip(gBar, bHist, 5);
+
+        String mLabel = "pro".equals(geminiModel) ? "🧠 Pro" : "flash".equals(geminiModel) ? "⚡ Flash" : "🧠 Auto";
+        Button bMod = ui.chip(mLabel, "#2E1065", "#4C1D95", "#8B5CF6", "#DDD6FE");
+        bMod.setOnClickListener(v -> {
+            geminiModel = "auto".equals(geminiModel) ? "flash" : "flash".equals(geminiModel) ? "pro" : "auto";
+            getSharedPreferences("ws_prefs", MODE_PRIVATE).edit().putString("gm_model", geminiModel).apply();
+            showGemini();
+        });
+        addGapChip(gBar, bMod, 5);
+
+        // Selettore Grado di Pensiero: Basso | Medio | Alto
+        LinearLayout tBar = ui.hBar(2, 6);
+        String[][] levels = {{"Pensiero: Basso", "basso"}, {"Pensiero: Medio", "medio"}, {"Pensiero: Alto", "alto"}};
+        for (int i = 0; i < levels.length; i++) {
+            final String lv = levels[i][1];
+            boolean act = lv.equals(geminiThink);
+            Button tb = ui.chip(levels[i][0], act ? "#7C3AED" : "#141923", "#6D28D9", act ? null : "#2A3447", act ? "#FFFFFF" : "#94A3B8");
+            tb.setOnClickListener(v -> {
+                geminiThink = lv;
+                getSharedPreferences("ws_prefs", MODE_PRIVATE).edit().putString("gm_think", geminiThink).apply();
+                showGemini();
+            });
+            if (i == 0) tBar.addView(tb);
+            else addGapChip(tBar, tb, 5);
+        }
+
         final EditText et = new EditText(this);
-        et.setHint("Chiedi a Gemini (voce o tastiera)...");
+        et.setHint("Chiedi a Gemini...");
         et.setHintTextColor(Color.parseColor("#64748B"));
         et.setTextColor(Color.WHITE);
         et.setBackground(ui.roundBox("#141923", "#7C3AED", 18));
@@ -173,13 +207,15 @@ public class MainActivity extends Activity {
         askBtn.setOnClickListener(v -> {
             final String q = et.getText().toString().trim();
             if (q.isEmpty()) return;
-            askBtn.setText("Gemini sta pensando...");
+            askBtn.setText("Gemini sta ragionando...");
             askBtn.setEnabled(false);
             pool.execute(() -> {
                 try {
-                    String res = api.get("/gemini/ask?q=" + URLEncoder.encode(q, "UTF-8"), true);
-                    String reply = new JSONObject(res).optString("reply", "Nessuna risposta.");
-                    geminiHistory.add(0, new String[]{q, reply});
+                    String u = "/gemini/ask?q=" + URLEncoder.encode(q, "UTF-8")
+                            + "&model=" + geminiModel + "&think=" + geminiThink;
+                    String reply = new JSONObject(api.get(u, true)).optString("reply", "Nessuna risposta.");
+                    geminiHistory.add(0, new String[]{"Tu", q});
+                    geminiHistory.add(1, new String[]{"Gemini", reply});
                     runOnUiThread(this::showGemini);
                 } catch (Exception e) {
                     runOnUiThread(() -> { askBtn.setText("Errore: " + e.getMessage()); askBtn.setEnabled(true); });
@@ -190,17 +226,73 @@ public class MainActivity extends Activity {
 
         for (final String[] turn : geminiHistory) {
             LinearLayout card = ui.card();
-            ui.text(card, "Tu: " + turn[0], 11.5f, "#C4B5FD", true);
+            boolean isUser = "Tu".equals(turn[0]);
+            ui.text(card, turn[0], 11f, isUser ? "#C4B5FD" : "#38BDF8", true);
             ui.text(card, turn[1], 13f, "#F8FAFC", false);
-            Button bCopy = ui.pill("📋 Copia risposta", "#141923", "#222B3A", "#334155", "#38BDF8");
-            bCopy.setOnClickListener(v -> {
-                ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-                if (cm != null) cm.setPrimaryClip(ClipData.newPlainText("Gemini", turn[1]));
-                Toast.makeText(this, "Copiato!", Toast.LENGTH_SHORT).show();
-            });
-            card.addView(bCopy);
+            if (!isUser) {
+                Button bCopy = ui.pill("📋 Copia", "#141923", "#222B3A", "#334155", "#38BDF8");
+                bCopy.setOnClickListener(v -> {
+                    ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                    if (cm != null) cm.setPrimaryClip(ClipData.newPlainText("Gemini", turn[1]));
+                    Toast.makeText(this, "Copiato!", Toast.LENGTH_SHORT).show();
+                });
+                card.addView(bCopy);
+            }
             ui.box.addView(card);
         }
+    }
+
+    private void showGeminiChats() {
+        ui.clear();
+        Button back = ui.chip("← Torna a Gemini", "#181E29", "#263042", "#2D3748", "#FFFFFF");
+        back.setOnClickListener(v -> onBackPressed());
+        ui.box.addView(back);
+        ui.text(ui.box, "Vecchie Chat Gemini", 15f, "#C4B5FD", true);
+        final TextView ld = ui.text(ui.box, "Lettura cronologia dal telefono...", 12.5f, "#94A3B8", false);
+
+        pool.execute(() -> {
+            try {
+                JSONArray chats = new JSONObject(api.get("/gemini/chats", true)).optJSONArray("chats");
+                runOnUiThread(() -> {
+                    ui.box.removeView(ld);
+                    if (chats == null || chats.length() == 0) {
+                        ui.text(ui.box, "Nessuna chat trovata. Apri Gemini su SocialBridge.", 12f, "#E2E8F0", false);
+                        return;
+                    }
+                    for (int i = 0; i < chats.length(); i++) {
+                        JSONObject c = chats.optJSONObject(i);
+                        if (c == null) continue;
+                        final String title = c.optString("title", "Conversazione");
+                        final String url = c.optString("url", "");
+                        Button bChat = ui.pill("💬 " + title, "#141923", "#1E2634", "#4C1D95", "#F8FAFC");
+                        bChat.setOnClickListener(v -> openOldGeminiChat(title, url));
+                        ui.box.addView(bChat);
+                    }
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> ld.setText("Errore chat: " + e.getMessage()));
+            }
+        });
+    }
+
+    private void openOldGeminiChat(final String title, final String url) {
+        ui.clear();
+        ui.text(ui.box, "Apertura: " + title + "...", 13f, "#C4B5FD", true);
+        pool.execute(() -> {
+            try {
+                JSONArray turns = new JSONObject(api.get("/gemini/open?url=" + URLEncoder.encode(url, "UTF-8"), true)).optJSONArray("turns");
+                geminiHistory.clear();
+                if (turns != null) {
+                    for (int i = 0; i < turns.length(); i++) {
+                        JSONObject t = turns.optJSONObject(i);
+                        if (t != null) geminiHistory.add(new String[]{t.optString("role", "Gemini"), t.optString("text", "")});
+                    }
+                }
+                runOnUiThread(() -> { backStack.clear(); showGemini(); });
+            } catch (Exception e) {
+                runOnUiThread(() -> ui.text(ui.box, "Errore apertura chat: " + e.getMessage(), 12.5f, "#F87171", false));
+            }
+        });
     }
 
     // ==================== GOOGLE NEWS ====================
@@ -251,7 +343,7 @@ public class MainActivity extends Activity {
         });
     }
 
-    // ==================== INSTAGRAM (CAROSELLI, STORIE, VIDEO, COMMENTI) ====================
+    // ==================== INSTAGRAM ====================
 
     private void showInsta(final boolean force) {
         ui.clear();
@@ -496,7 +588,7 @@ public class MainActivity extends Activity {
         ui.box.addView(send);
     }
 
-    // ==================== REDDIT (GALLERIE, VIDEO, COMMENTI ANNIDATI + GIF) ====================
+    // ==================== REDDIT ====================
 
     private void showReddit(final String sub, final String sort, final boolean force) {
         ui.clear();
@@ -598,13 +690,18 @@ public class MainActivity extends Activity {
         final TextView ld = ui.text(ui.box, "Caricamento post e commenti...", 12.5f, "#94A3B8", false);
         pool.execute(() -> {
             try {
-                JSONArray rootArr = new JSONArray(api.get("/reddit/comments?url=" + URLEncoder.encode(perm, "UTF-8"), false));
+                String raw = api.get("/reddit/comments?url=" + URLEncoder.encode(perm, "UTF-8"), false).trim();
+                if (!raw.startsWith("[")) throw new Exception("Risposta non valida dal server Reddit");
+                JSONArray rootArr = new JSONArray(raw);
+                if (rootArr.length() < 2) throw new Exception("Discussione vuota");
+
                 final JSONObject postObj = rootArr.getJSONObject(0).getJSONObject("data").getJSONArray("children").getJSONObject(0).getJSONObject("data");
                 final JSONArray arr = rootArr.getJSONObject(1).getJSONObject("data").getJSONArray("children");
                 String rawTitle = postObj.optString("title", "");
                 String rawSelf = postObj.optString("selftext", "").trim();
                 final String fTitle = (autoIt && !rawTitle.isEmpty()) ? api.translateIt(rawTitle) : rawTitle;
                 final String fSelf = (autoIt && !rawSelf.isEmpty()) ? api.translateIt(rawSelf) : rawSelf;
+
                 runOnUiThread(() -> {
                     ui.box.removeView(ld);
                     if (!fTitle.isEmpty()) ui.text(ui.box, fTitle, 14f, "#F8FAFC", true);
@@ -639,7 +736,6 @@ public class MainActivity extends Activity {
             final TextView tv = ui.text(box, body, 12.5f, "#E2E8F0", false);
             if (autoIt) pool.execute(() -> { final String tr = api.translateIt(body); if (!tr.equals(body)) runOnUiThread(() -> tv.setText(tr)); });
 
-            // Estrae GIF/foto nei commenti Reddit (link diretti o media_metadata)
             Matcher mImg = Pattern.compile("(https?://\\S+\\.(?:jpg|jpeg|png|webp|gif))", Pattern.CASE_INSENSITIVE).matcher(body);
             if (mImg.find()) attachImage(box, mImg.group(1).replace("&amp;", "&"), false);
             JSONObject mm = c.optJSONObject("media_metadata");

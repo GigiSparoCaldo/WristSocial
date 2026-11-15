@@ -21,6 +21,7 @@ import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.MediaController;
@@ -80,6 +81,21 @@ public class WatchUi {
         box.removeAllViews();
         scroll.scrollTo(0, 0);
         scroll.requestFocus();
+    }
+
+    public LinearLayout hBar(int topDp, int botDp) {
+        HorizontalScrollView hsv = new HorizontalScrollView(act);
+        hsv.setHorizontalScrollBarEnabled(false);
+        LinearLayout.LayoutParams hlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        hlp.setMargins(0, dp(topDp), 0, dp(botDp));
+        hsv.setLayoutParams(hlp);
+        LinearLayout row = new LinearLayout(act);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        hsv.addView(row);
+        box.addView(hsv);
+        return row;
     }
 
     public boolean onRotary(MotionEvent ev) {
@@ -183,12 +199,13 @@ public class WatchUi {
     public Button chip(String text, String norm, String press, String stroke, String fg) {
         Button b = new Button(act);
         b.setText(text);
+        b.setSingleLine(true);
         b.setAllCaps(false);
-        b.setTextSize(sp(11f));
+        b.setTextSize(sp(11.5f));
         b.setTypeface(null, Typeface.BOLD);
         b.setTextColor(Color.parseColor(fg));
         b.setBackground(pillBg(norm, press, stroke));
-        b.setPadding(dp(8), dp(6), dp(8), dp(6));
+        b.setPadding(dp(11), dp(6), dp(11), dp(6));
         b.setMinHeight(0);
         b.setMinimumHeight(0);
         b.setMinWidth(0);
