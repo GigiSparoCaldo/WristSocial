@@ -35,6 +35,12 @@ public class BridgeClient {
         public byte[] data;
     }
 
+    public String getProxiedVideoUrl(String rawUrl) {
+        try {
+            return host + "/vid?pin=" + URLEncoder.encode(pin, "UTF-8") + "&url=" + URLEncoder.encode(rawUrl, "UTF-8");
+        } catch (Exception e) { return rawUrl; }
+    }
+
     public String discoverHost() {
         Set<String> candidates = new LinkedHashSet<>();
         candidates.add("192.168.43.1");
@@ -62,14 +68,10 @@ public class BridgeClient {
                 if (found.get() != null) return;
                 try {
                     HttpURLConnection c = (HttpURLConnection) new URL("http://" + ip + ":8765/ping").openConnection();
-                    c.setConnectTimeout(350);
-                    c.setReadTimeout(450);
+                    c.setConnectTimeout(350); c.setReadTimeout(450);
                     c.setRequestProperty("X-Pin", pin);
-                    int code = c.getResponseCode();
-                    c.disconnect();
-                    if (code == 200 || code == 401) {
-                        found.compareAndSet(null, "http://" + ip + ":8765");
-                    }
+                    int code = c.getResponseCode(); c.disconnect();
+                    if (code == 200 || code == 401) found.compareAndSet(null, "http://" + ip + ":8765");
                 } catch (Exception ignored) {}
             });
         }
@@ -83,14 +85,12 @@ public class BridgeClient {
         String key = host + pathAndQuery;
         if (!force && cache.get(key) != null) return cache.get(key);
         HttpURLConnection c = (HttpURLConnection) new URL(key).openConnection();
-        c.setConnectTimeout(6000);
-        c.setReadTimeout(10000);
+        c.setConnectTimeout(7000); c.setReadTimeout(26000);
         c.setRequestProperty("X-Pin", pin);
         int code = c.getResponseCode();
         InputStream is = code >= 400 ? c.getErrorStream() : c.getInputStream();
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        byte[] buf = new byte[8192];
-        int n;
+        byte[] buf = new byte[8192]; int n;
         while ((n = is.read(buf)) != -1) out.write(buf, 0, n);
         c.disconnect();
         String res = new String(out.toByteArray(), StandardCharsets.UTF_8);
@@ -102,17 +102,14 @@ public class BridgeClient {
 
     public String postData(String path, byte[] payload, String filename) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(host + path).openConnection();
-        c.setRequestMethod("POST");
-        c.setDoOutput(true);
-        c.setConnectTimeout(6000);
-        c.setReadTimeout(12000);
+        c.setRequestMethod("POST"); c.setDoOutput(true);
+        c.setConnectTimeout(6000); c.setReadTimeout(12000);
         c.setRequestProperty("X-Pin", pin);
         if (filename != null) c.setRequestProperty("X-Filename", URLEncoder.encode(filename, "UTF-8"));
         try (OutputStream os = c.getOutputStream()) { os.write(payload); }
         InputStream is = c.getResponseCode() >= 400 ? c.getErrorStream() : c.getInputStream();
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        byte[] buf = new byte[4096];
-        int n;
+        byte[] buf = new byte[4096]; int n;
         while ((n = is.read(buf)) != -1) out.write(buf, 0, n);
         c.disconnect();
         return new String(out.toByteArray(), StandardCharsets.UTF_8);
@@ -120,16 +117,14 @@ public class BridgeClient {
 
     public DownloadedFile downloadFile() throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(host + "/file").openConnection();
-        c.setConnectTimeout(7000);
-        c.setReadTimeout(12000);
+        c.setConnectTimeout(7000); c.setReadTimeout(12000);
         c.setRequestProperty("X-Pin", pin);
         if (c.getResponseCode() >= 400) { c.disconnect(); throw new Exception("Nessun file pronto sullo Z Flip"); }
         String hdrName = c.getHeaderField("X-Filename");
         DownloadedFile df = new DownloadedFile();
         df.name = (hdrName != null && !hdrName.isEmpty()) ? URLDecoder.decode(hdrName, "UTF-8") : "file_zflip.bin";
         try (InputStream is = c.getInputStream(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            byte[] buf = new byte[8192];
-            int n;
+            byte[] buf = new byte[8192]; int n;
             while ((n = is.read(buf)) != -1) out.write(buf, 0, n);
             df.data = out.toByteArray();
         } finally { c.disconnect(); }
@@ -139,12 +134,10 @@ public class BridgeClient {
     public Bitmap getProxiedImage(String rawUrl) throws Exception {
         String req = host + "/img?url=" + URLEncoder.encode(rawUrl, "UTF-8");
         HttpURLConnection c = (HttpURLConnection) new URL(req).openConnection();
-        c.setConnectTimeout(7000);
-        c.setReadTimeout(10000);
+        c.setConnectTimeout(7000); c.setReadTimeout(10000);
         c.setRequestProperty("X-Pin", pin);
         try (InputStream is = c.getInputStream(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            byte[] buf = new byte[8192];
-            int n;
+            byte[] buf = new byte[8192]; int n;
             while ((n = is.read(buf)) != -1) out.write(buf, 0, n);
             byte[] b = out.toByteArray();
             return BitmapFactory.decodeByteArray(b, 0, b.length);
@@ -158,17 +151,14 @@ public class BridgeClient {
             String cut = txt.length() > 1200 ? txt.substring(0, 1200) : txt;
             HttpURLConnection c = (HttpURLConnection) new URL(
                     "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=it&dt=t").openConnection();
-            c.setRequestMethod("POST");
-            c.setDoOutput(true);
-            c.setConnectTimeout(6000);
-            c.setReadTimeout(8000);
+            c.setRequestMethod("POST"); c.setDoOutput(true);
+            c.setConnectTimeout(6000); c.setReadTimeout(8000);
             try (OutputStream os = c.getOutputStream()) {
                 os.write(("q=" + URLEncoder.encode(cut, "UTF-8")).getBytes(StandardCharsets.UTF_8));
             }
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             try (InputStream is = c.getInputStream()) {
-                byte[] buf = new byte[4096];
-                int n;
+                byte[] buf = new byte[4096]; int n;
                 while ((n = is.read(buf)) != -1) out.write(buf, 0, n);
             }
             JSONArray root = new JSONArray(new String(out.toByteArray(), StandardCharsets.UTF_8));
