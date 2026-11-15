@@ -1,6 +1,7 @@
 package com.akemi.wristsocial;
 
 import android.app.Activity;
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapShader;
 import android.graphics.Canvas;
@@ -11,6 +12,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.StateListDrawable;
+import android.media.AudioManager;
 import android.net.Uri;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
@@ -100,12 +102,21 @@ public class WatchUi {
 
     public boolean onRotary(MotionEvent ev) {
         if (ev.getAction() == MotionEvent.ACTION_SCROLL && ev.isFromSource(InputDevice.SOURCE_ROTARY_ENCODER)) {
-            if (overlay.getVisibility() != View.VISIBLE) {
-                float d = -ev.getAxisValue(MotionEvent.AXIS_SCROLL)
-                        * ViewConfiguration.get(act).getScaledVerticalScrollFactor();
-                scroll.scrollBy(0, Math.round(d));
+            float axis = ev.getAxisValue(MotionEvent.AXIS_SCROLL);
+            if (overlay.getVisibility() == View.VISIBLE) {
+                if (videoView != null) {
+                    AudioManager am = (AudioManager) act.getSystemService(Context.AUDIO_SERVICE);
+                    if (am != null && axis != 0f) {
+                        am.adjustStreamVolume(AudioManager.STREAM_MUSIC,
+                                axis > 0 ? AudioManager.ADJUST_RAISE : AudioManager.ADJUST_LOWER,
+                                AudioManager.FLAG_SHOW_UI);
+                    }
+                }
                 return true;
             }
+            float d = -axis * ViewConfiguration.get(act).getScaledVerticalScrollFactor();
+            scroll.scrollBy(0, Math.round(d));
+            return true;
         }
         return false;
     }
