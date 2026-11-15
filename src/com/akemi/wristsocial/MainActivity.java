@@ -595,12 +595,30 @@ public class MainActivity extends Activity {
         Button back = ui.chip("← Indietro", "#181E29", "#263042", "#2D3748", "#FFFFFF");
         back.setOnClickListener(v -> onBackPressed());
         ui.box.addView(back);
-        final TextView ld = ui.text(ui.box, "Caricamento commenti...", 12.5f, "#94A3B8", false);
+        final TextView ld = ui.text(ui.box, "Caricamento post e commenti...", 12.5f, "#94A3B8", false);
         pool.execute(() -> {
             try {
-                JSONArray arr = new JSONObject(api.get("/reddit/comments?url=" + URLEncoder.encode(perm, "UTF-8"), false))
-                        .getJSONArray(1).getJSONObject("data").getJSONArray("children");
-                runOnUiThread(() -> { ui.box.removeView(ld); renderRedditTree(arr, 0); });
+                JSONArray rootArr = new JSONArray(api.get("/reddit/comments?url=" + URLEncoder.encode(perm, "UTF-8"), false));
+                final JSONObject postObj = rootArr.getJSONObject(0).getJSONObject("data").getJSONArray("children").getJSONObject(0).getJSONObject("data");
+                final JSONArray arr = rootArr.getJSONObject(1).getJSONObject("data").getJSONArray("children");
+                String rawTitle = postObj.optString("title", "");
+                String rawSelf = postObj.optString("selftext", "").trim();
+                final String fTitle = (autoIt && !rawTitle.isEmpty()) ? api.translateIt(rawTitle) : rawTitle;
+                final String fSelf = (autoIt && !rawSelf.isEmpty()) ? api.translateIt(rawSelf) : rawSelf;
+                runOnUiThread(() -> {
+                    ui.box.removeView(ld);
+                    if (!fTitle.isEmpty()) ui.text(ui.box, fTitle, 14f, "#F8FAFC", true);
+                    String pUrl = postObj.optString("url", "");
+                    if (pUrl.matches(".*\\.(jpg|jpeg|png|webp|gif)(\\?.*)?$")) attachImage(ui.box, pUrl, false);
+                    String pVid = extractRedditVideo(postObj);
+                    if (pVid != null && !pVid.isEmpty()) {
+                        Button pv = ui.pill("▶ Guarda Video", "#EA580C", "#C2410C", null, "#FFFFFF");
+                        pv.setOnClickListener(v -> ui.playVideo(api.getProxiedVideoUrl(pVid)));
+                        ui.box.addView(pv);
+                    }
+                    if (!fSelf.isEmpty()) ui.text(ui.box, fSelf, 13f, "#E2E8F0", false);
+                    renderRedditTree(arr, 0);
+                });
             } catch (Exception e) { runOnUiThread(() -> ld.setText("Errore commenti: " + e.getMessage())); }
         });
     }
